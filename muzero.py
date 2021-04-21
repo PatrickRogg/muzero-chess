@@ -256,8 +256,7 @@ class MuZero:
             while info["training_step"] < self.config.training_steps:
                 print(
                     f'Training step: {info["training_step"]}/'
-                    f'{self.config.training_steps}. Played games: {info["num_played_games"]}.',
-                    end="\r",
+                    f'{self.config.training_steps}. Played games: {info["num_played_games"]}.'
                 )
                 info = ray.get(self.shared_storage_worker.get_info.remote(keys))
                 writer.add_scalar(
