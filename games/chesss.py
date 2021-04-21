@@ -281,6 +281,7 @@ class Chess:
         if self._is_game_over():
             reward = 0 if self.result == 'draw' else 1
             'Over'
+            print(self.result)
             return self.get_observation(), reward, True
 
         self._set_next_player()
