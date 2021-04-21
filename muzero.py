@@ -254,7 +254,11 @@ class MuZero:
         info = ray.get(self.shared_storage_worker.get_info.remote(keys))
         try:
             while info["training_step"] < self.config.training_steps:
-                print(f'Training step: {info["training_step"]}/')
+                print(
+                    f'Training step: {info["training_step"]}/'
+                    f'{self.config.training_steps}. Played games: {info["num_played_games"]}.',
+                    end="\r",
+                )
                 info = ray.get(self.shared_storage_worker.get_info.remote(keys))
                 writer.add_scalar(
                     "1.Total_reward/1.Total_reward", info["total_reward"], counter,
