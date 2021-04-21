@@ -103,9 +103,9 @@ class MuZeroConfig:
                                          datetime.datetime.now().strftime("%Y-%m-%d--%H-%M-%S"))  # Path to store the
         # model weights and TensorBoard logs
         self.save_model = True  # Save the checkpoint in results_path as model.checkpoint
-        self.training_steps = 1000000  # Total number of training steps (ie weights update according to a batch)
+        self.training_steps = 100  # Total number of training steps (ie weights update according to a batch)
         self.batch_size = 64  # Number of parts of games to train on at each training step
-        self.checkpoint_interval = 10  # Number of training steps before using the model for self-playing
+        self.checkpoint_interval = 5  # Number of training steps before using the model for self-playing
         self.value_loss_weight = 0.25  # Scale the value loss to avoid overfitting of the value function, paper recommends 0.25 (See paper appendix Reanalyze)
         self.train_on_gpu = torch.cuda.is_available()  # Train on GPU if available
 
@@ -280,6 +280,7 @@ class Chess:
 
         if self._is_game_over():
             reward = 0 if self.result == 'draw' else 1
+            'Over'
             return self.get_observation(), reward, True
 
         self._set_next_player()
