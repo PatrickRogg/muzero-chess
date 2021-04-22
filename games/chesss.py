@@ -57,15 +57,15 @@ class MuZeroConfig:
         # It doesn't influence training. None, "random" or "expert" if implemented in the Game class
 
         ### Self-Play
-        self.num_workers = 1  # Number of simultaneous threads/workers self-playing to feed the replay buffer
+        self.num_workers = 5  # Number of simultaneous threads/workers self-playing to feed the replay buffer
         self.selfplay_on_gpu = True
-        self.max_moves = 400  # Maximum number of moves if game is not finished before
-        self.num_simulations = 10  # Number of future moves self-simulated
+        self.max_moves = 512  # Maximum number of moves if game is not finished before
+        self.num_simulations = 800  # Number of future moves self-simulated
         self.discount = 1  # Chronological discount of the reward
         self.temperature_threshold = None  # Number of moves before dropping the temperature given by visit_softmax_temperature_fn to 0 (ie selecting the best action). If None, visit_softmax_temperature_fn is used every time
 
         # Root prior exploration noise
-        self.root_dirichlet_alpha = 0.1
+        self.root_dirichlet_alpha = 0.3 # https://medium.com/applied-data-science/how-to-build-your-own-deepmind-muzero-in-python-part-2-3-f99dad7a7ad
         self.root_exploration_fraction = 0.25
 
         # UCB formula
@@ -103,9 +103,9 @@ class MuZeroConfig:
                                          datetime.datetime.now().strftime("%Y-%m-%d--%H-%M-%S"))  # Path to store the
         # model weights and TensorBoard logs
         self.save_model = True  # Save the checkpoint in results_path as model.checkpoint
-        self.training_steps = 100  # Total number of training steps (ie weights update according to a batch)
-        self.batch_size = 64  # Number of parts of games to train on at each training step
-        self.checkpoint_interval = 1  # Number of training steps before using the model for self-playing
+        self.training_steps = int(700e3)  # Total number of training steps (ie weights update according to a batch)
+        self.batch_size = 4096  # Number of parts of games to train on at each training step
+        self.checkpoint_interval = int(1e3)  # Number of training steps before using the model for self-playing
         self.value_loss_weight = 0.25  # Scale the value loss to avoid overfitting of the value function, paper recommends 0.25 (See paper appendix Reanalyze)
         self.train_on_gpu = torch.cuda.is_available()  # Train on GPU if available
 
@@ -114,13 +114,13 @@ class MuZeroConfig:
         self.momentum = 0.9  # Used only if optimizer is SGD
 
         # Exponential learning rate schedule
-        self.lr_init = 0.003  # Initial learning rate
+        self.lr_init = 2e-1 # Initial learning rate
         self.lr_decay_rate = 1  # Set it to 1 to use a constant learning rate
-        self.lr_decay_steps = 10000
+        self.lr_decay_steps = 100000
 
         ### Replay Buffer
         self.replay_buffer_size = 3000  # Number of self-play games to keep in the replay buffer
-        self.num_unroll_steps = 20  # Number of game moves to keep for every batch element
+        self.num_unroll_steps = 4  # Number of game moves to keep for every batch element
         self.td_steps = 20  # Number of steps in the future to take into account for calculating the target value
         self.PER = True  # Prioritized Replay (See paper appendix Training), select in priority the elements in the replay buffer which are unexpected for the network
         self.PER_alpha = 0.5  # How much prioritization is used, 0 corresponding to the uniform case, paper suggests 1
@@ -213,24 +213,25 @@ class Game(AbstractGame):
         Returns:
             An integer from the action space.
         """
+        print(self.env.board)
+        print(self.env.board.legal_moves)
         while True:
             try:
                 legal_moves = self.env.board.legal_moves
 
                 print(legal_moves)
 
-                choice_uci = chess.Move.from_uci(
+                move_chosen = chess.Move.from_uci(
                     input(
                         f"Enter move for {'White' if self.to_play() == PLAYER_WHITE else 'Black'}: "
                     )
                 )
-                if choice_uci in legal_moves:
-                    break
+                if move_chosen in legal_moves:
+                    print(move_chosen.uci())
+                    return uci_to_index[move_chosen.uci()]
             except:
                 pass
             print("Wrong input, try again")
-
-        return uci_to_index[choice_uci]
 
     def expert_agent(self):
         """
@@ -256,23 +257,23 @@ class Game(AbstractGame):
         return uci_moves[action_number]
 
 
-PLAYER_WHITE = 1
-PLAYER_BLACK = 2
+PLAYER_WHITE = 0
+PLAYER_BLACK = 1
 
 
 class Chess:
     def __init__(self):
         self.board = chess.Board()
         self.result = None
-        self.player = PLAYER_WHITE  # todo random if white or black
+        self.player = PLAYER_WHITE
 
     def to_play(self):
-        return PLAYER_WHITE if self.player == PLAYER_WHITE else PLAYER_BLACK
+        return self.player
 
     def reset(self):
         self.board = chess.Board()
         self.result = None
-        self.player = PLAYER_WHITE  # todo random if white or black
+        self.player = PLAYER_WHITE
         return self.get_observation()
 
     def step(self, action: int):
@@ -299,7 +300,7 @@ class Chess:
 
     def get_observation(self):
         int_board = self._convert_to_int_board()
-        return numpy.array([int_board, int_board, int_board])
+        return numpy.array([int_board, [self.player], int_board])
 
     def expert_action(self):
         action = numpy.random.choice(self.get_legal_actions())
