@@ -5,8 +5,11 @@ import chess
 import numpy
 import torch
 
+from stockfish import Stockfish
+
 from games.abstract_game import AbstractGame
 
+game_count = 0
 uci_moves = []
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
 
@@ -34,6 +37,9 @@ uci_to_index = {}
 for i, uci in enumerate(uci_moves):
     uci_to_index[uci] = i
 
+stock_fish = Stockfish('stockfish/stockfish_13_linux_x64_bmi2')
+stock_fish.set_elo_rating(3000)
+
 
 class MuZeroConfig:
     def __init__(self):
@@ -44,7 +50,7 @@ class MuZeroConfig:
         # memory. None will use every GPUs available
 
         ### Game
-        self.observation_shape = (3, 8, 8)  # Dimensions of the game observation, must be 3D (channel, height, width).
+        self.observation_shape = (1, 8, 8)  # Dimensions of the game observation, must be 3D (channel, height, width).
         # For a 1D array, please reshape it to (1, 1, length of array)
         self.action_space = list(
             range(len(uci_moves)))  # Fixed list of all possible actions. You should only edit the length
@@ -57,10 +63,10 @@ class MuZeroConfig:
         # It doesn't influence training. None, "random" or "expert" if implemented in the Game class
 
         ### Self-Play
-        self.num_workers = 5  # Number of simultaneous threads/workers self-playing to feed the replay buffer
+        self.num_workers = 1  # Number of simultaneous threads/workers self-playing to feed the replay buffer
         self.selfplay_on_gpu = True
         self.max_moves = 512  # Maximum number of moves if game is not finished before
-        self.num_simulations = 800  # Number of future moves self-simulated
+        self.num_simulations = 30  # Number of future moves self-simulated
         self.discount = 1  # Chronological discount of the reward
         self.temperature_threshold = None  # Number of moves before dropping the temperature given by visit_softmax_temperature_fn to 0 (ie selecting the best action). If None, visit_softmax_temperature_fn is used every time
 
@@ -103,9 +109,9 @@ class MuZeroConfig:
                                          datetime.datetime.now().strftime("%Y-%m-%d--%H-%M-%S"))  # Path to store the
         # model weights and TensorBoard logs
         self.save_model = True  # Save the checkpoint in results_path as model.checkpoint
-        self.training_steps = int(700e3)  # Total number of training steps (ie weights update according to a batch)
-        self.batch_size = 4096  # Number of parts of games to train on at each training step
-        self.checkpoint_interval = int(1e3)  # Number of training steps before using the model for self-playing
+        self.training_steps = 1000000  # Total number of training steps (ie weights update according to a batch)
+        self.batch_size = 50  # Number of parts of games to train on at each training step
+        self.checkpoint_interval = 25  # Number of training steps before using the model for self-playing
         self.value_loss_weight = 0.25  # Scale the value loss to avoid overfitting of the value function, paper recommends 0.25 (See paper appendix Reanalyze)
         self.train_on_gpu = torch.cuda.is_available()  # Train on GPU if available
 
@@ -266,6 +272,7 @@ class Chess:
         self.board = chess.Board()
         self.result = None
         self.player = PLAYER_WHITE
+        self.moves = 0
 
     def to_play(self):
         return self.player
@@ -274,20 +281,30 @@ class Chess:
         self.board = chess.Board()
         self.result = None
         self.player = PLAYER_WHITE
+        self.moves = 0
+
         return self.get_observation()
 
     def step(self, action: int):
         self.board.push_uci(uci_moves[action])
+        self.moves += 1
+        stock_fish.set_fen_position(self.board.fen())
+        val = stock_fish.get_evaluation()['value']
+
+        print(self.moves)
+
+        if self.player == PLAYER_WHITE:
+            reward = 1 if val > 0 else 0
+        else:
+            reward = 1 if val < 0 else 0
 
         if self._is_game_over():
-            reward = 0 if self.result == 'draw' else 1
-            'Over'
-            print(self.result)
+            reward = 0 if self.result == 'draw' else 1000
             return self.get_observation(), reward, True
 
         self._set_next_player()
 
-        return self.get_observation(), 0, False
+        return self.get_observation(), reward, False
 
     def get_legal_actions(self):
         legal_moves = []
@@ -300,7 +317,7 @@ class Chess:
 
     def get_observation(self):
         int_board = self._convert_to_int_board()
-        return numpy.array([int_board, [self.player], int_board])
+        return numpy.array([int_board])
 
     def expert_action(self):
         action = numpy.random.choice(self.get_legal_actions())
