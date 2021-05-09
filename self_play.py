@@ -29,6 +29,8 @@ class SelfPlay:
         self.model.eval()
 
     def continuous_self_play(self, shared_storage, replay_buffer, test_mode=False):
+        game_count = 0
+
         while ray.get(
             shared_storage.get_info.remote("training_step")
         ) < self.config.training_steps and not ray.get(
@@ -48,6 +50,9 @@ class SelfPlay:
                     "self",
                     0,
                 )
+
+                game_count += 1
+                print(f'Games: {game_count}, Training steps: {self.config.training_steps}')
 
                 replay_buffer.save_game.remote(game_history, shared_storage)
 
