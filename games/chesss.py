@@ -269,6 +269,7 @@ PLAYER_BLACK = 1
 
 class Chess:
     def __init__(self):
+        print('Game started')
         self.board = chess.Board()
         self.result = None
         self.player = PLAYER_WHITE
