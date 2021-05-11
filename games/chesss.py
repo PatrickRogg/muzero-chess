@@ -66,7 +66,7 @@ class MuZeroConfig:
         self.num_workers = 1  # Number of simultaneous threads/workers self-playing to feed the replay buffer
         self.selfplay_on_gpu = True
         self.max_moves = 512  # Maximum number of moves if game is not finished before
-        self.num_simulations = 10  # Number of future moves self-simulated
+        self.num_simulations = 15  # Number of future moves self-simulated
         self.discount = 1  # Chronological discount of the reward
         self.temperature_threshold = None  # Number of moves before dropping the temperature given by visit_softmax_temperature_fn to 0 (ie selecting the best action). If None, visit_softmax_temperature_fn is used every time
 
@@ -111,7 +111,7 @@ class MuZeroConfig:
         self.save_model = True  # Save the checkpoint in results_path as model.checkpoint
         self.training_steps = 10000000  # Total number of training steps (ie weights update according to a batch)
         self.batch_size = 512  # Number of parts of games to train on at each training step
-        self.checkpoint_interval = 15  # Number of training steps before using the model for self-playing
+        self.checkpoint_interval = 100  # Number of training steps before using the model for self-playing
         self.value_loss_weight = 0.25  # Scale the value loss to avoid overfitting of the value function, paper recommends 0.25 (See paper appendix Reanalyze)
         self.train_on_gpu = torch.cuda.is_available()  # Train on GPU if available
 
@@ -290,18 +290,23 @@ class Chess:
         self.board.push_uci(uci_moves[action])
         self.moves += 1
         stock_fish.set_fen_position(self.board.fen())
-        val = stock_fish.get_evaluation()['value']
-
         reward = 0
 
         if self.moves < 150 and (self.moves + 1) / 5 == 0:
+            prediction = stock_fish.get_evaluation()['value']
+
             if self.player == PLAYER_WHITE:
-                reward = 1 if val >= 0 else -1
+                reward = prediction
             else:
-                reward = 1 if val <= 0 else -1
+                reward = prediction * -1
 
         if self._is_game_over():
             reward = 0 if self.result == 'draw' else 10000
+
+            if self.board.can_claim_threefold_repetition():
+                prediction = stock_fish.get_evaluation()['value']
+                reward = -1000 if prediction != 0 else 0
+
             print(f'{self.result} total moves: {self.moves}')
             return self.get_observation(), reward, True
 
