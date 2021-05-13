@@ -289,30 +289,14 @@ class Chess:
     def step(self, action: int):
         self.board.push_uci(uci_moves[action])
         self.moves += 1
-        stock_fish.set_fen_position(self.board.fen())
-        reward = 0
-
-        if self.moves < 150 and (self.moves + 1) / 5 == 0:
-            prediction = stock_fish.get_evaluation()['value']
-
-            if self.player == PLAYER_WHITE:
-                reward = prediction
-            else:
-                reward = prediction * -1
 
         if self._is_game_over():
-            reward = 0 if self.result == 'draw' else 10000
-
-            if self.board.can_claim_threefold_repetition():
-                prediction = stock_fish.get_evaluation()['value']
-                reward = -1000 if prediction != 0 else 0
-
-            print(f'{self.result} total moves: {self.moves}')
+            reward = 0 if self.result == 'draw' else 1
             return self.get_observation(), reward, True
 
         self._set_next_player()
 
-        return self.get_observation(), reward, False
+        return self.get_observation(), 0, False
 
     def get_legal_actions(self):
         legal_moves = []
