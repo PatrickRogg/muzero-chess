@@ -291,6 +291,7 @@ class Chess:
         self.moves += 1
 
         if self._is_game_over():
+            print(f'Game ended - {self.result} - total moves: {self.moves}')
             reward = 0 if self.result == 'draw' else 1
             return self.get_observation(), reward, True
 
