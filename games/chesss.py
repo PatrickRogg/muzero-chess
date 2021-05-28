@@ -5,40 +5,9 @@ import chess
 import numpy
 import torch
 
-from stockfish import Stockfish
-
 from games.abstract_game import AbstractGame
-
-game_count = 0
-uci_moves = []
-letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
-
-for n1 in range(1, 9):
-    for l1 in letters:
-        for n2 in range(1, 9):
-            for l2 in letters:
-                uci = l1 + str(n1) + l2 + str(n2)
-                uci_moves.append(uci)
-
-promotions_white = ['a7a8', 'b7b8', 'c7c8', 'd7d8', 'e7e8', 'f7f8', 'g7g8', 'h7h8',
-                    'a7b8', 'b7a8', 'b7c8', 'c7b8', 'c7d8', 'd7c8', 'd7e8', 'e7d8', 'e7f8', 'f7e8', 'f7g8', 'g7f8',
-                    'g7h8', 'h7g8']
-promotions_black = ['a2a1', 'b2b1', 'c2c1', 'd2d1', 'e2e1', 'f2f1', 'g2g1', 'h2h1',
-                    'a2b1', 'b2a1', 'b2c1', 'c2b1', 'c2d1', 'd2c1', 'd2e1', 'e2d1', 'e2f1', 'f2e1', 'f2g1', 'g2f1',
-                    'g2h1', 'h2g1']
-promotions = promotions_white + promotions_black
-
-for piece in ['r', 'n', 'b', 'q']:
-    for promotion in promotions:
-        uci_moves.append(promotion + piece)
-
-uci_to_index = {}
-
-for i, uci in enumerate(uci_moves):
-    uci_to_index[uci] = i
-
-stock_fish = Stockfish('stockfish/stockfish_13_linux_x64_bmi2')
-stock_fish.set_elo_rating(3000)
+from move_mapper import uci_moves, uci_to_index
+from stock_fish import stock_fish
 
 
 class MuZeroConfig:
@@ -50,7 +19,7 @@ class MuZeroConfig:
         # memory. None will use every GPUs available
 
         ### Game
-        self.observation_shape = (1, 8, 8)  # Dimensions of the game observation, must be 3D (channel, height, width).
+        self.observation_shape = (2, 8, 8)  # Dimensions of the game observation, must be 3D (channel, height, width).
         # For a 1D array, please reshape it to (1, 1, length of array)
         self.action_space = list(
             range(len(uci_moves)))  # Fixed list of all possible actions. You should only edit the length
@@ -59,14 +28,14 @@ class MuZeroConfig:
 
         # Evaluate
         self.muzero_player = 0  # Turn Muzero begins to play (0: MuZero plays first, 1: MuZero plays second)
-        self.opponent = 'self'  # Hard coded agent that MuZero faces to assess his progress in multiplayer games.
+        self.opponent = 'expert'  # Hard coded agent that MuZero faces to assess his progress in multiplayer games.
         # It doesn't influence training. None, "random" or "expert" if implemented in the Game class
 
         ### Self-Play
         self.num_workers = 1  # Number of simultaneous threads/workers self-playing to feed the replay buffer
-        self.selfplay_on_gpu = True
+        self.selfplay_on_gpu = torch.cuda.is_available()
         self.max_moves = 512  # Maximum number of moves if game is not finished before
-        self.num_simulations = 1000  # Number of future moves self-simulated
+        self.num_simulations = 15  # Number of future moves self-simulated
         self.discount = 1  # Chronological discount of the reward
         self.temperature_threshold = None  # Number of moves before dropping the temperature given by visit_softmax_temperature_fn to 0 (ie selecting the best action). If None, visit_softmax_temperature_fn is used every time
 
@@ -111,7 +80,7 @@ class MuZeroConfig:
         self.save_model = True  # Save the checkpoint in results_path as model.checkpoint
         self.training_steps = 10000000  # Total number of training steps (ie weights update according to a batch)
         self.batch_size = 512  # Number of parts of games to train on at each training step
-        self.checkpoint_interval = 1000  # Number of training steps before using the model for self-playing
+        self.checkpoint_interval = 100  # Number of training steps before using the model for self-playing
         self.value_loss_weight = 0.25  # Scale the value loss to avoid overfitting of the value function, paper recommends 0.25 (See paper appendix Reanalyze)
         self.train_on_gpu = torch.cuda.is_available()  # Train on GPU if available
 
@@ -269,7 +238,6 @@ PLAYER_BLACK = 1
 
 class Chess:
     def __init__(self):
-        print('Game started')
         self.board = chess.Board()
         self.result = None
         self.player = PLAYER_WHITE
@@ -310,11 +278,12 @@ class Chess:
 
     def get_observation(self):
         int_board = self._convert_to_int_board()
-        return numpy.array([int_board])
+        to_move = [[self.to_play()] * 8] * 8
+
+        return numpy.array([int_board, to_move])
 
     def expert_action(self):
-        action = numpy.random.choice(self.get_legal_actions())
-        return action
+        return uci_to_index[stock_fish.get_best_move()]
 
     def render(self):
         print(self.board)
