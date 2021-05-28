@@ -4,10 +4,10 @@ import os
 import chess
 import numpy
 import torch
+from stockfish import Stockfish
 
 from games.abstract_game import AbstractGame
 from move_mapper import uci_moves, uci_to_index
-from stock_fish import stock_fish
 
 
 class MuZeroConfig:
@@ -55,7 +55,7 @@ class MuZeroConfig:
         # Residual Network
         self.downsample = False  # Downsample observations before representation network, False / "CNN" (lighter)
         # / "resnet" (See paper appendix Network Architecture)
-        self.blocks = 7  # Number of blocks in the ResNet
+        self.blocks = 1  # Number of blocks in the ResNet
         self.channels = 16  # Number of channels in the ResNet
         self.reduced_channels_reward = 16  # Number of channels in reward head
         self.reduced_channels_value = 16  # Number of channels in value head
@@ -242,6 +242,9 @@ class Chess:
         self.result = None
         self.player = PLAYER_WHITE
         self.moves = 0
+        self.stock_fish = Stockfish('stockfish/stockfish_13_linux_x64_bmi2',
+                                    parameters={"Threads": 2, "Minimum Thinking Time": 500})
+        self.stock_fish.set_elo_rating(3000)
 
     def to_play(self):
         return self.player
@@ -264,6 +267,7 @@ class Chess:
             return self.get_observation(), reward, True
 
         self._set_next_player()
+        self.stock_fish.set_fen_position(self.board.fen())
 
         return self.get_observation(), 0, False
 
@@ -283,7 +287,7 @@ class Chess:
         return numpy.array([int_board, to_move])
 
     def expert_action(self):
-        return uci_to_index[stock_fish.get_best_move()]
+        return uci_to_index[self.stock_fish.get_best_move()]
 
     def render(self):
         print(self.board)

@@ -7,7 +7,6 @@ import torch
 
 import models
 from move_mapper import uci_to_index
-from stock_fish import stock_fish
 
 
 @ray.remote
@@ -156,17 +155,13 @@ class SelfPlay:
                         self.game.to_play(),
                         True,
                     )
-                    # action = self.select_action(
-                    #     root,
-                    #     temperature
-                    #     if not temperature_threshold
-                    #     or len(game_history.action_history) < temperature_threshold
-                    #     else 0,
-                    # )
-
-                    best_move = stock_fish.get_best_move()
-                    action = uci_to_index[best_move]
-                    print(best_move)
+                    action = self.select_action(
+                        root,
+                        temperature
+                        if not temperature_threshold
+                        or len(game_history.action_history) < temperature_threshold
+                        else 0,
+                    )
 
                     if render:
                         print(f'Tree depth: {mcts_info["max_tree_depth"]}')
@@ -178,6 +173,8 @@ class SelfPlay:
                         opponent, stacked_observations
                     )
 
+                best_move = self.game.stock_fish.get_best_move()
+                action = uci_to_index[best_move]
                 observation, reward, done = self.game.step(action)
 
                 if render:
