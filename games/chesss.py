@@ -247,6 +247,7 @@ class Chess:
         self.stock_fish.set_elo_rating(3000)
 
     def to_play(self):
+        self.stock_fish.set_fen_position(self.board.fen())
         return self.player
 
     def reset(self):
@@ -267,7 +268,6 @@ class Chess:
             return self.get_observation(), reward, True
 
         self._set_next_player()
-        self.stock_fish.set_fen_position(self.board.fen())
 
         return self.get_observation(), 0, False
 
