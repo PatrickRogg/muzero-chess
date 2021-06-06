@@ -28,19 +28,19 @@ class MuZeroConfig:
 
         # Evaluate
         self.muzero_player = 0  # Turn Muzero begins to play (0: MuZero plays first, 1: MuZero plays second)
-        self.opponent = 'expert'  # Hard coded agent that MuZero faces to assess his progress in multiplayer games.
+        self.opponent = 'self'  # Hard coded agent that MuZero faces to assess his progress in multiplayer games.
         # It doesn't influence training. None, "random" or "expert" if implemented in the Game class
 
         ### Self-Play
         self.num_workers = 1  # Number of simultaneous threads/workers self-playing to feed the replay buffer
         self.selfplay_on_gpu = torch.cuda.is_available()
         self.max_moves = 512  # Maximum number of moves if game is not finished before
-        self.num_simulations = 15  # Number of future moves self-simulated
+        self.num_simulations = 10  # Number of future moves self-simulated
         self.discount = 1  # Chronological discount of the reward
         self.temperature_threshold = None  # Number of moves before dropping the temperature given by visit_softmax_temperature_fn to 0 (ie selecting the best action). If None, visit_softmax_temperature_fn is used every time
 
         # Root prior exploration noise
-        self.root_dirichlet_alpha = 0.3 # https://medium.com/applied-data-science/how-to-build-your-own-deepmind-muzero-in-python-part-2-3-f99dad7a7ad
+        self.root_dirichlet_alpha = 0.3  # https://medium.com/applied-data-science/how-to-build-your-own-deepmind-muzero-in-python-part-2-3-f99dad7a7ad
         self.root_exploration_fraction = 0.25
 
         # UCB formula
@@ -80,7 +80,7 @@ class MuZeroConfig:
         self.save_model = True  # Save the checkpoint in results_path as model.checkpoint
         self.training_steps = 10000000  # Total number of training steps (ie weights update according to a batch)
         self.batch_size = 512  # Number of parts of games to train on at each training step
-        self.checkpoint_interval = 100  # Number of training steps before using the model for self-playing
+        self.checkpoint_interval = 50  # Number of training steps before using the model for self-playing
         self.value_loss_weight = 0.25  # Scale the value loss to avoid overfitting of the value function, paper recommends 0.25 (See paper appendix Reanalyze)
         self.train_on_gpu = torch.cuda.is_available()  # Train on GPU if available
 
@@ -89,7 +89,7 @@ class MuZeroConfig:
         self.momentum = 0.9  # Used only if optimizer is SGD
 
         # Exponential learning rate schedule
-        self.lr_init = 2e-1 # Initial learning rate
+        self.lr_init = 2e-1  # Initial learning rate
         self.lr_decay_rate = 1  # Set it to 1 to use a constant learning rate
         self.lr_decay_steps = 100000
 
@@ -189,21 +189,18 @@ class Game(AbstractGame):
             An integer from the action space.
         """
         print(self.env.board)
-        print(self.env.board.legal_moves)
         while True:
             try:
-                legal_moves = self.env.board.legal_moves
+                legal_moves = self.env.get_legal_moves()
 
-                print(legal_moves)
+                print(str(legal_moves))
 
-                move_chosen = chess.Move.from_uci(
-                    input(
-                        f"Enter move for {'White' if self.to_play() == PLAYER_WHITE else 'Black'}: "
-                    )
+                move_chosen = input(
+                    f"Enter move for {'White' if self.to_play() == PLAYER_WHITE else 'Black'}: "
                 )
                 if move_chosen in legal_moves:
-                    print(move_chosen.uci())
-                    return uci_to_index[move_chosen.uci()]
+                    print(move_chosen)
+                    return uci_to_index[move_chosen]
             except:
                 pass
             print("Wrong input, try again")
@@ -243,7 +240,7 @@ class Chess:
         self.player = PLAYER_WHITE
         self.moves = 0
         self.stock_fish = Stockfish('stockfish/stockfish_13_linux_x64_bmi2',
-                                    parameters={"Threads": 2, "Minimum Thinking Time": 500})
+                                    parameters={"Threads": 2, "Minimum Thinking Time": 200})
         self.stock_fish.set_elo_rating(3000)
 
     def to_play(self):
@@ -261,10 +258,17 @@ class Chess:
     def step(self, action: int):
         self.board.push_uci(uci_moves[action])
         self.moves += 1
+        reward = 0
+        best_move = self.stock_fish.get_best_move()
+        best_action = uci_to_index[best_move]
+
+        if action == best_action:
+            reward = 1
+
+        # print(f'Moves: {self.moves} - Player: {self.player} - Move: {uci_moves[action]} - Reward: {reward}')
 
         if self._is_game_over():
             print(f'Game ended - {self.result} - total moves: {self.moves}')
-            reward = 0 if self.result == 'draw' else 1
             return self.get_observation(), reward, True
 
         self._set_next_player()
@@ -277,6 +281,14 @@ class Chess:
         for legal_move in self.board.legal_moves:
             action_num = uci_to_index[legal_move.uci()]
             legal_moves.append(action_num)
+
+        return legal_moves
+
+    def get_legal_moves(self):
+        legal_moves = []
+
+        for legal_move in self.board.legal_moves:
+            legal_moves.append(legal_move.uci())
 
         return legal_moves
 

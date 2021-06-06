@@ -172,9 +172,6 @@ class SelfPlay:
                     action, root = self.select_opponent_action(
                         opponent, stacked_observations
                     )
-
-                best_move = self.game.env.stock_fish.get_best_move()
-                action = uci_to_index[best_move]
                 observation, reward, done = self.game.step(action)
 
                 if render:
